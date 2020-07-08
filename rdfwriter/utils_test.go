@@ -96,16 +96,16 @@ func TestTopologicalSortTriples(t *testing.T) {
 
 	// TestCase 2: another valid test-case where the input is a cyclic graph.
 	/*
-					 (N0)
-				   /  ^   \
-		    (N1) /    |    \ (N2)
-				 \    |    /
-		           v  |  v
-		            (N3)
-		    Triples:
-				1. N0 -> N1 -> N3
-				2. N0 -> N2 -> N3
-				3. N3 -> N4 -> N0     // couldn't show N4 in the graph.
+	           (N0)
+	          / ^  \
+	     (N1)/  |   \(N2)
+	         \  |   /
+	          v |  v
+	           (N3)
+	   Triples:
+	       1. N0 -> N1 -> N3
+	       2. N0 -> N2 -> N3
+	       3. N3 -> N4 -> N0     // couldn't show N4 in the graph.
 	*/
 	nodes = getNBlankNodes(5)
 	triples = []*parser.Triple{
@@ -178,23 +178,23 @@ func Test_topologicalSortHelper(t *testing.T) {
 	}
 
 	/*
-		Graph that we will be using for all the testcases in this function:
-		 It is a simple three staged input with a single source and sink pair.
+	   Graph that we will be using for all the testcases in this function:
+	    It is a simple three staged input with a single source and sink pair.
 
-								 (N1)
-		                (N0) ------------> (N2)
-						 |				    |
-						 |				    |
-			 		 (N3)|				    |(N6)
-						 |                  |
-						 v                  v
-						(N4) ------------> (N7)
-								(N5)
-			Triples that exists in the above graph:
-			1. N0 -> N1 -> N2
-			2. N2 -> N6 -> N7
-			3. N0 -> N3 -> N4
-			4. N3 -> N5 -> N7
+	                            (N1)
+	                   (N0) ------------> (N2)
+	                    |                  |
+	                    |                  |
+	                (N3)|                  |(N6)
+	                    |                  |
+	                    v                  v
+	                   (N4) ------------> (N7)
+	                           (N5)
+	       Triples that exists in the above graph:
+	       1. N0 -> N1 -> N2
+	       2. N2 -> N6 -> N7
+	       3. N0 -> N3 -> N4
+	       4. N3 -> N5 -> N7
 	*/
 	numberNodes := 8
 	nodes := getNBlankNodes(numberNodes)
