@@ -3,6 +3,8 @@ package rdfwriter
 import (
 	"fmt"
 	"github.com/RishabhBhatnagar/gordf/rdfloader/parser"
+	"github.com/RishabhBhatnagar/gordf/uri"
+	"strings"
 )
 
 // returns an adjacency list from a list of triples
@@ -142,4 +144,42 @@ func TopologicalSortTriples(triples []*parser.Triple) (sortedTriples []*parser.T
 		}
 	}
 	return sortedTriples, nil
+}
+
+func DisjointSet(triples []*parser.Triple, subjects []*parser.Node) map[*parser.Node]*parser.Node {
+	parent := make(map[*parser.Node]*parser.Node)
+	for _, triple := range triples {
+		parent[triple.Object] = triple.Subject
+		if _, exists := parent[triple.Subject]; !exists {
+			parent[triple.Subject] = nil
+		}
+	}
+	return parent
+}
+
+// a schemaDefinition is a dictionary which maps the abbreviation defined in the root tag.
+// for example: if the root tag is =>
+//      <rdf:RDF
+//		    xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"/>
+// the schemaDefinition will contain:
+//    {"rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#"}
+// this function will output a reverse map that is:
+//    {"http://www.w3.org/1999/02/22-rdf-syntax-ns#": "rdf"}
+func invertSchemaDefinition(schemaDefinition map[string]uri.URIRef) map[string]string {
+	invertedMap := make(map[string]string)
+	for abbreviation := range schemaDefinition {
+		uri := schemaDefinition[abbreviation]
+		invertedMap[strings.Trim(uri.String(), "#")] = abbreviation
+	}
+	return invertedMap
+}
+
+// return true if the target is in the given list
+func any(target string, list []string) bool {
+	for _, s := range list {
+		if s == target {
+			return true
+		}
+	}
+	return false
 }
