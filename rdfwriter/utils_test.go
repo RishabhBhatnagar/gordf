@@ -2,6 +2,7 @@ package rdfwriter
 
 import (
 	"github.com/RishabhBhatnagar/gordf/rdfloader/parser"
+	"github.com/RishabhBhatnagar/gordf/uri"
 	"reflect"
 	"testing"
 )
@@ -250,5 +251,95 @@ func Test_topologicalSortHelper(t *testing.T) {
 	// to be added to the list and (N7) should be the first node.
 	if resultList[0] != nodes[7] || resultList[lastIndex-1] != nodes[0] {
 		t.Error("order of resultList if not correct")
+	}
+}
+
+func TestDisjointSet(t *testing.T) {
+
+	// TestCase 1: two distinct sets
+	/* Modelling the following graph:
+	            (N5)            (N6)
+		(N0) ---------> (N1) ---------> (N2)
+
+	           (N7)
+	    (N3) --------> (N4)
+	*/
+	// Clear enough, there are two different sets in the depicted graph.
+	nodes := getNBlankNodes(8)
+	triples := []*parser.Triple{
+		{Subject: nodes[0], Predicate: nodes[5], Object: nodes[1]},
+		{Subject: nodes[1], Predicate: nodes[6], Object: nodes[2]},
+		{Subject: nodes[3], Predicate: nodes[7], Object: nodes[4]},
+	}
+	parent := DisjointSet(triples)
+	nSets := 0
+	for subject := range parent {
+		if parent[subject] == nil {
+			nSets++
+		}
+	}
+	if nSets != 2 {
+		t.Errorf("Expected Graph to have exactly %d disjoint sets. Found %d sets", 2, nSets)
+	}
+
+	// TestCase 2: All Independent Triples:
+	/*
+	           (N8)                      (N9)
+	   (N0) -----------> (N1)    (N2) -----------> (N3)
+
+	           (N10)                     (N11)
+	   (N4) -----------> (N5)    (N6) -----------> (N7)
+	*/
+	nodes = getNBlankNodes(12)
+	triples = []*parser.Triple{
+		{Subject: nodes[0], Predicate: nodes[8], Object: nodes[1]},
+		{Subject: nodes[2], Predicate: nodes[9], Object: nodes[3]},
+		{Subject: nodes[4], Predicate: nodes[10], Object: nodes[5]},
+		{Subject: nodes[6], Predicate: nodes[11], Object: nodes[7]},
+	}
+	parent = DisjointSet(triples)
+	nSets = 0
+	for node := range parent {
+		if parent[node] == nil {
+			nSets++
+		}
+	}
+	if nSets != len(triples) {
+		t.Errorf("Mismatch in the number of sets. expected %v disjoint sets, found %v sets", len(triples), nSets)
+	}
+}
+
+func Test_any(t *testing.T) {
+	// any function checks if the target is in the given list of strings
+
+	listStrings := []string{"c", "b", "a"}
+
+	// case when the target string is present in the strings
+	targetString := "a"
+	if !any(targetString, listStrings) {
+		// targetString wasn't found even though it exits in the list
+		t.Errorf("couldn't find %v in %v. even though it exits in the list", targetString, listStrings)
+	}
+
+	// case when the target is not present in the strings
+	targetString = "z"
+	if any(targetString, listStrings) {
+		// targetString was found even though it doesn't exist in the list.
+		t.Errorf("found %v in the list: %v. even though it doesn't exist in the list", targetString, listStrings)
+	}
+}
+
+func Test_invertSchemaDefinition(t *testing.T) {
+	// no special variations to test for.
+	spdxString := "http://spdx.org/rdf/terms"
+	spdxURI, _ := uri.NewURIRef(parser.RDFNS)
+	schemaDefinition := map[string]uri.URIRef{
+		"spdx": spdxURI,
+	}
+
+	inv := invertSchemaDefinition(schemaDefinition)
+	expected := map[string]string{spdxString: "spdx"}
+	if reflect.DeepEqual(inv, expected) {
+		t.Errorf("expected %v, found %v", expected, inv)
 	}
 }

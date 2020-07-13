@@ -13,7 +13,7 @@ func shortenURI(uri string, invSchemaDefinition map[string]string) (string, erro
 		return "", fmt.Errorf("uri doesn't have two parts of type schemaName:tagName. URI: %s", uri)
 	}
 	baseURI := strings.Trim(uri[:splitIndex], "#")
-	fragment := strings.Trim(uri[splitIndex + 1:], "#")
+	fragment := strings.Trim(uri[splitIndex+1:], "#")
 	if abbrev, exists := invSchemaDefinition[baseURI]; exists {
 		return fmt.Sprintf("%s:%s", abbrev, fragment), nil
 	}
@@ -23,16 +23,12 @@ func shortenURI(uri string, invSchemaDefinition map[string]string) (string, erro
 // from a given adjacency list, return a list of root-nodes which will be used
 // to generate string forms of the nodes to be written.
 func getRootNodes(triples []*parser.Triple, adjList map[*parser.Node][]*parser.Node) (rootNodes []*parser.Node) {
-	// getting all the subject nodes from which the root nodes will be selected
-	var subjects []*parser.Node
-	subjects = getAllSubjects(adjList)
-
 
 	// In a disjoint set, indices with root nodes will point to nil
 	// that means, if disjointSet[1] is nil, subjects[1] has no parent.
 	// that is, subject[1] is not the object of any of the triples.
 	var parent map[*parser.Node]*parser.Node
-	parent = DisjointSet(triples, subjects)
+	parent = DisjointSet(triples)
 
 	for node := range parent {
 		if parent[node] == nil {
@@ -42,7 +38,7 @@ func getRootNodes(triples []*parser.Triple, adjList map[*parser.Node][]*parser.N
 	return rootNodes
 }
 
-func getAllSubjects(adjList map[*parser.Node][]*parser.Node) (subjects []*parser.Node){
+func getAllSubjects(adjList map[*parser.Node][]*parser.Node) (subjects []*parser.Node) {
 	for sub := range adjList {
 		if len(adjList[sub]) > 0 {
 			subjects = append(subjects, sub)
@@ -143,23 +139,22 @@ func stringify(node *parser.Node, nodeToTriples map[*parser.Node][]*parser.Tripl
 			// the tag ends here and doesn't have any further childs.
 			// object is even one level deep
 			// number of tabs increases.
-			childString += strings.Repeat(tab, depth + 1) + triple.Object.ID
+			childString += strings.Repeat(tab, depth+1) + triple.Object.ID
 		} else {
 			// we have a sub-child which is not a literal type. it can be a blank or a IRI node.
-			temp, err := stringify(triple.Object, nodeToTriples, invSchemaDefinition, depth + 1, tab)
+			temp, err := stringify(triple.Object, nodeToTriples, invSchemaDefinition, depth+1, tab)
 			if err != nil {
 				return "", err
 			}
 			childString += temp
 		}
 		// adding the closing tag
-		childString += "\n" + strings.Repeat(tab, depth) +  fmt.Sprintf(closingTagFormat, predicateURI)
+		childString += "\n" + strings.Repeat(tab, depth) + fmt.Sprintf(closingTagFormat, predicateURI)
 		childrenString += childString + "\n"
 	}
 	childrenString = strings.TrimSuffix(childrenString, "\n")
 	return fmt.Sprintf("%s\n%v\n%s", openingTag, childrenString, closingTag), nil
 }
-
 
 func TriplesToString(triples []*parser.Triple, schemaDefinition map[string]uri.URIRef, tab string) (outputString string, err error) {
 	// linearly ordering the triples in a non-increasing order of depth.

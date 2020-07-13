@@ -146,7 +146,7 @@ func TopologicalSortTriples(triples []*parser.Triple) (sortedTriples []*parser.T
 	return sortedTriples, nil
 }
 
-func DisjointSet(triples []*parser.Triple, subjects []*parser.Node) map[*parser.Node]*parser.Node {
+func DisjointSet(triples []*parser.Triple) map[*parser.Node]*parser.Node {
 	parent := make(map[*parser.Node]*parser.Node)
 	for _, triple := range triples {
 		parent[triple.Object] = triple.Subject
@@ -168,8 +168,8 @@ func DisjointSet(triples []*parser.Triple, subjects []*parser.Node) map[*parser.
 func invertSchemaDefinition(schemaDefinition map[string]uri.URIRef) map[string]string {
 	invertedMap := make(map[string]string)
 	for abbreviation := range schemaDefinition {
-		uri := schemaDefinition[abbreviation]
-		invertedMap[strings.Trim(uri.String(), "#")] = abbreviation
+		_uri := schemaDefinition[abbreviation]
+		invertedMap[strings.Trim(_uri.String(), "#")] = abbreviation
 	}
 	return invertedMap
 }
