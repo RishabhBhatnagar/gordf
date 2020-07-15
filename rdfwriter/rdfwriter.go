@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/RishabhBhatnagar/gordf/rdfloader/parser"
 	"github.com/RishabhBhatnagar/gordf/uri"
+	"io/ioutil"
 	"strings"
 )
 
@@ -57,11 +58,10 @@ func getRootTagFromSchemaDefinition(schemaDefinition map[string]uri.URIRef, tab 
 		tagURI := schemaDefinition[tag]
 		rootTag += tab + fmt.Sprintf(`%s:%s="%s"`, "xmlns", tag, tagURI.String()) + "\n"
 	}
-	rootTag = rootTag[:len(rootTag) - 1]   // removing the last \n char.
+	rootTag = rootTag[:len(rootTag)-1] // removing the last \n char.
 	rootTag += ">"
 	return rootTag
 }
-
 
 func getRestTriples(triples []*parser.Triple) (restTriples []*parser.Triple) {
 	rdfTypeURI := parser.RDFNS + "type"
@@ -185,4 +185,15 @@ func TriplesToString(triples []*parser.Triple, schemaDefinition map[string]uri.U
 	rootTagString := getRootTagFromSchemaDefinition(schemaDefinition, tab)
 	rootEndTag := "</rdf:RDF>"
 	return fmt.Sprintf("%s\n%s%s", rootTagString, outputString, rootEndTag), nil
+}
+
+// converts the input triples to string and writes it to the file.
+func WriteToFile(triples []*parser.Triple, schemaDefinition map[string]uri.URIRef, tab, filePath string) error {
+	opString, err := TriplesToString(triples, schemaDefinition, tab)
+	if err != nil {
+		return err
+	}
+
+	// Default file permission is hardcoded. Maybe leave it to the user.
+	return ioutil.WriteFile(filePath, []byte(opString), 655)
 }

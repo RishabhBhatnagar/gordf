@@ -15,7 +15,6 @@ func xmlreaderFromString(fileContent string) xmlreader.XMLReader {
 	return xmlreader.XMLReaderFromFileObject(bufio.NewReader(io.Reader(bytes.NewReader([]byte(fileContent)))))
 }
 
-
 func main() {
 	testString := `
 		<?xml version="1.0"?>
@@ -37,6 +36,7 @@ func main() {
 	// sets rdf triples from the xml elements from the xmlreader
 	rdfParser.Parse(rootBlock)
 
+	// Example 1:
 	// Getting string of all the triples
 	tab := "    "
 	opString, err := rdfwriter.TriplesToString(rdfParser.Triples, rdfParser.SchemaDefinition, tab)
@@ -46,4 +46,10 @@ func main() {
 	asterisks := strings.Repeat("*", 33)
 	fmt.Println(asterisks, "OUTPUT String", asterisks)
 	fmt.Println(opString)
+
+	// Example 2: writing rdf-triples to a file.
+	err = rdfwriter.WriteToFile(rdfParser.Triples, rdfParser.SchemaDefinition, tab, "output.rdf")
+	if err != nil {
+		panic(err)
+	}
 }
