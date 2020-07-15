@@ -14,6 +14,10 @@ func shortenURI(uri string, invSchemaDefinition map[string]string) (string, erro
 	}
 	baseURI := strings.Trim(uri[:splitIndex], "#")
 	fragment := strings.Trim(uri[splitIndex+1:], "#")
+	fragment = strings.TrimSpace(fragment)
+	if len(fragment) == 0 {
+		return "", fmt.Errorf(`fragment "%v" doesn't exist`, fragment)
+	}
 	if abbrev, exists := invSchemaDefinition[baseURI]; exists {
 		return fmt.Sprintf("%s:%s", abbrev, fragment), nil
 	}
@@ -22,7 +26,7 @@ func shortenURI(uri string, invSchemaDefinition map[string]string) (string, erro
 
 // from a given adjacency list, return a list of root-nodes which will be used
 // to generate string forms of the nodes to be written.
-func getRootNodes(triples []*parser.Triple, adjList map[*parser.Node][]*parser.Node) (rootNodes []*parser.Node) {
+func getRootNodes(triples []*parser.Triple) (rootNodes []*parser.Node) {
 
 	// In a disjoint set, indices with root nodes will point to nil
 	// that means, if disjointSet[1] is nil, subjects[1] has no parent.
@@ -38,15 +42,6 @@ func getRootNodes(triples []*parser.Triple, adjList map[*parser.Node][]*parser.N
 	return rootNodes
 }
 
-func getAllSubjects(adjList map[*parser.Node][]*parser.Node) (subjects []*parser.Node) {
-	for sub := range adjList {
-		if len(adjList[sub]) > 0 {
-			subjects = append(subjects, sub)
-		}
-	}
-	return subjects
-}
-
 func filterTriples(triples []*parser.Triple, subject, predicate, object *string) (result []*parser.Triple) {
 	for _, triple := range triples {
 		if (subject == nil || *subject == triple.Subject.ID) && (predicate == nil || *predicate == triple.Predicate.ID) && (object == nil || *object == triple.Object.ID) {
@@ -55,6 +50,18 @@ func filterTriples(triples []*parser.Triple, subject, predicate, object *string)
 	}
 	return
 }
+
+func getRootTagFromSchemaDefinition(schemaDefinition map[string]uri.URIRef, tab string) string {
+	rootTag := "<rdf:RDF\n"
+	for tag := range schemaDefinition {
+		tagURI := schemaDefinition[tag]
+		rootTag += tab + fmt.Sprintf(`%s:%s="%s"`, "xmlns", tag, tagURI.String()) + "\n"
+	}
+	rootTag = rootTag[:len(rootTag) - 1]   // removing the last \n char.
+	rootTag += ">"
+	return rootTag
+}
+
 
 func getRestTriples(triples []*parser.Triple) (restTriples []*parser.Triple) {
 	rdfTypeURI := parser.RDFNS + "type"
@@ -164,16 +171,18 @@ func TriplesToString(triples []*parser.Triple, schemaDefinition map[string]uri.U
 	}
 
 	invSchemaDefinition := invertSchemaDefinition(schemaDefinition)
-	adjList, nodeToTriples := getAdjacencyList(sortedTriples)
-	rootTags := getRootNodes(sortedTriples, adjList)
+	_, nodeToTriples := getAdjacencyList(sortedTriples)
+	rootTags := getRootNodes(sortedTriples)
 
 	// now, we can iterate over all the root-nodes and generate the string representation of the nodes.
 	for _, tag := range rootTags {
-		currString, err := stringify(tag, nodeToTriples, invSchemaDefinition, 0, "  ")
+		currString, err := stringify(tag, nodeToTriples, invSchemaDefinition, 1, "  ")
 		if err != nil {
 			return outputString, nil
 		}
 		outputString += currString + "\n"
 	}
-	return outputString, nil
+	rootTagString := getRootTagFromSchemaDefinition(schemaDefinition, tab)
+	rootEndTag := "</rdf:RDF>"
+	return fmt.Sprintf("%s\n%s%s", rootTagString, outputString, rootEndTag), nil
 }
