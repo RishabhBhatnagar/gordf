@@ -14,6 +14,14 @@ func max(n1, n2 int) int {
 	return n2
 }
 
+func getInvSchema() map[string]string {
+	return map[string]string{
+		"http://spdx.org/rdf/terms":                  "spdx",
+		"http://www.w3.org/1999/02/22-rdf-syntax-ns": "rdf",
+		"http://www.w3.org/2000/01/rdf-schema":       "rdfs",
+	}
+}
+
 // returns a slice of n blank nodes.
 // n > 0
 func getNBlankNodes(n int) (blankNodes []*parser.Node) {
@@ -341,5 +349,124 @@ func Test_invertSchemaDefinition(t *testing.T) {
 	expected := map[string]string{spdxString: "spdx"}
 	if reflect.DeepEqual(inv, expected) {
 		t.Errorf("expected %v, found %v", expected, inv)
+	}
+}
+
+func Test_getRDFNSAbbreviation(t *testing.T) {
+	invSchemaDefinition := make(map[string]string)
+
+	// TestCase 1: Default prefix of the rdf namespace should be "rdf"
+	abbrev := getRDFNSAbbreviation(invSchemaDefinition)
+	if abbrev != "rdf" {
+		t.Errorf("by default, the rdf namespace should be abbreviated by rdf and not %s", abbrev)
+	}
+
+	// TestCase 2: Case when the rdf namespace exists in the invSchemaDefinition.
+	expectedAbbrev := "rdfNS"
+	invSchemaDefinition[parser.RDFNS] = expectedAbbrev
+	abbrev = getRDFNSAbbreviation(invSchemaDefinition)
+	if abbrev != expectedAbbrev {
+		t.Errorf("expected %s abbreviation, found %v", expectedAbbrev, abbrev)
+	}
+}
+
+func Test_getRestTriples(t *testing.T) {
+	nodes := getNBlankNodes(7)
+
+	// TestCase 1: Base Case where all the triples have predicate
+	//             of rdf attributes
+	triples := []*parser.Triple{
+		{
+			Subject:   nodes[0],
+			Predicate: &parser.Node{NodeType: parser.IRI, ID: parser.RDFNS + "type"},
+			Object:    nodes[1]},
+		{
+			Subject:   nodes[2],
+			Predicate: &parser.Node{NodeType: parser.IRI, ID: parser.RDFNS + "nodeID"},
+			Object:    nodes[3],
+		},
+	}
+	restTriples := getRestTriples(triples)
+	if n := len(restTriples); n != 0 {
+		t.Errorf("expected empty output. got %d nodes", n)
+	}
+
+	// TestCase 2: Case where the output has at least one node which is not a
+	//             rdf attribute
+	triples = append(triples, &parser.Triple{
+		Subject:   nodes[4],
+		Predicate: nodes[5],
+		Object:    nodes[6],
+	})
+	restTriples = getRestTriples(triples)
+	if n := len(restTriples); n != 1 {
+		t.Errorf("expected only one extra triple. found %d triples", n)
+	}
+}
+
+func Test_shortenURI(t *testing.T) {
+	invSchema := getInvSchema()
+
+	// TestCase 1: uri doesn't have two fragments
+	//             Must raise an error
+	uriref := "http://spdx.org/rdf/terms#"
+	_, err := shortenURI(uriref, invSchema)
+	if err == nil {
+		t.Errorf("didn't raise any error for url with no fragment")
+	}
+
+	// TestCase 2: uri with inexistent baseURI
+	//             Must raise an error
+	uriref = "https://www.googlge.com/terms#website"
+	_, err = shortenURI(uriref, invSchema)
+	if err == nil {
+		t.Errorf("expected an error stating baseURI doesn't exist in the given schema")
+	}
+
+	// TestCase 3: valid uri
+	uriref = "http://spdx.org/rdf/terms#Snippet"
+	expectedOP := "spdx:Snippet"
+	shortURI, err := shortenURI(uriref, invSchema)
+	if err != nil {
+		t.Errorf("unexpected error converting a valid URI")
+	}
+	if shortURI != expectedOP {
+		t.Errorf("expected output: %v, found: %v", expectedOP, shortURI)
+	}
+}
+
+func Test_getRootNodes(t *testing.T) {
+	nodes := getNBlankNodes(10)
+
+	// TestCase 1: self loop
+	triples := []*parser.Triple{
+		{Subject: nodes[0], Predicate: nodes[1], Object: nodes[0]},
+	}
+	roots := getRootNodes(triples)
+	if len(roots) != 0 {
+		t.Errorf("expected no roots as output. found %v", roots)
+	}
+
+	// TestCase 2: Disjoint Triples with distinct root elements
+	/*
+	   Graph:  3 disjoint triplets
+
+	                (N1)
+	        (N0) ---------> (N2)
+
+	               (N4)
+	        (N3) ---------> (N5)
+
+	               (N7)
+	        (N6) ---------> (N8)
+	*/
+	triples = []*parser.Triple{
+		{Subject: nodes[0], Predicate: nodes[1], Object: nodes[2]},
+		{Subject: nodes[3], Predicate: nodes[4], Object: nodes[5]},
+		{Subject: nodes[6], Predicate: nodes[7], Object: nodes[8]},
+	}
+	roots = getRootNodes(triples)
+	if len(roots) != len(triples) {
+		t.Errorf("expected %v root nodes, found %v nodes", len(roots), len(triples))
 	}
 }

@@ -26,8 +26,10 @@ func main() {
 		</rdf:RDF>
 	`
 
-	// in the real world, this will be replaced with xmlreader.XMLReaderFromFileObject() for getting a new file xmlreader
+	// in the real world, this will be replaced with
+	// xmlreader.XMLReaderFromFileObject call for getting a new file xmlreader
 	xmlReader := xmlreaderFromString(testString)
+	xmlReader, _ = xmlreader.XMLReaderFromFilePath("RDF Files/1.xml")
 	// parsing the underlying xml structure of rdf file.
 	rootBlock, _ := xmlReader.Read()
 
@@ -48,8 +50,8 @@ func main() {
 	fmt.Println(opString)
 
 	// Example 2: writing rdf-triples to a file.
-	err = rdfwriter.WriteToFile(rdfParser.Triples, rdfParser.SchemaDefinition, tab, "output.rdf")
-	if err != nil {
-		panic(err)
-	}
+	var b bytes.Buffer
+
+	// the output will be written to the buffer.
+	rdfwriter.WriteToFile(&b, rdfParser.Triples, rdfParser.SchemaDefinition, tab)
 }

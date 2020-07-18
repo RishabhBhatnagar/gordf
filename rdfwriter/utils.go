@@ -183,3 +183,68 @@ func any(target string, list []string) bool {
 	}
 	return false
 }
+
+// from the inverted schema definition, returns the name of the prefix used for
+// the rdf name space. Return defaults to "rdf"
+func getRDFNSAbbreviation(invSchemaDefinition map[string]string) string {
+	rdfNSAbbrev := "rdf"
+	if abbrev, exists := invSchemaDefinition[parser.RDFNS]; exists {
+		rdfNSAbbrev = abbrev
+	}
+	return rdfNSAbbrev
+}
+
+// given an expanded uri, returns abbreviated form for the same.
+// For example:
+// http://www.w3.org/1999/02/22-rdf-syntax-ns#Description will be abbreviated to rdf:Description
+func shortenURI(uri string, invSchemaDefinition map[string]string) (string, error) {
+	// Logic: Every uri with a fragment created by the uri.URIRef has if of
+	// type baseURI#fragment. This function splits the uri by # character and
+	// replaces the baseURI with the abbreviated form from the inverseSchemaDefinition
+
+	splitIndex := strings.LastIndex(uri, "#")
+	if splitIndex == -1 {
+		return "", fmt.Errorf("uri doesn't have two parts of type schemaName:tagName. URI: %s", uri)
+	}
+
+	baseURI := strings.Trim(uri[:splitIndex], "#")
+	fragment := strings.TrimSuffix(uri[splitIndex+1:], "#") // removing the trailing #.
+	fragment = strings.TrimSpace(fragment)
+	if len(fragment) == 0 {
+		return "", fmt.Errorf(`fragment "%v" doesn't exist`, fragment)
+	}
+	if abbrev, exists := invSchemaDefinition[baseURI]; exists {
+		return fmt.Sprintf("%s:%s", abbrev, fragment), nil
+	}
+	return "", fmt.Errorf("declaration of URI(%s) not found in the schemaDefinition", baseURI)
+}
+
+// from a given adjacency list, return a list of root-nodes which will be used
+// to generate string forms of the nodes to be written.
+func getRootNodes(triples []*parser.Triple) (rootNodes []*parser.Node) {
+
+	// In a disjoint set, indices with root nodes will point to nil
+	// that means, if disjointSet[node] is nil, the node has no parent
+	// and it is one of the root nodes.
+	var parent map[*parser.Node]*parser.Node
+	parent = DisjointSet(triples)
+
+	for node := range parent {
+		if parent[node] == nil {
+			rootNodes = append(rootNodes, node)
+		}
+	}
+	return rootNodes
+}
+
+// returns the triples that are not associated with tags of schemaName "rdf".
+func getRestTriples(triples []*parser.Triple) (restTriples []*parser.Triple) {
+	rdfTypeURI := parser.RDFNS + "type"
+	rdfNodeIDURI := parser.RDFNS + "nodeID"
+	for _, triple := range triples {
+		if !any(triple.Predicate.ID, []string{rdfNodeIDURI, rdfTypeURI}) {
+			restTriples = append(restTriples, triple)
+		}
+	}
+	return restTriples
+}

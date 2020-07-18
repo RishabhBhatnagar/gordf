@@ -4,46 +4,17 @@ import (
 	"fmt"
 	"github.com/RishabhBhatnagar/gordf/rdfloader/parser"
 	"github.com/RishabhBhatnagar/gordf/uri"
-	"io/ioutil"
+	"io"
 	"strings"
 )
 
-func shortenURI(uri string, invSchemaDefinition map[string]string) (string, error) {
-	splitIndex := strings.LastIndex(uri, "#")
-	if splitIndex == -1 {
-		return "", fmt.Errorf("uri doesn't have two parts of type schemaName:tagName. URI: %s", uri)
-	}
-	baseURI := strings.Trim(uri[:splitIndex], "#")
-	fragment := strings.Trim(uri[splitIndex+1:], "#")
-	fragment = strings.TrimSpace(fragment)
-	if len(fragment) == 0 {
-		return "", fmt.Errorf(`fragment "%v" doesn't exist`, fragment)
-	}
-	if abbrev, exists := invSchemaDefinition[baseURI]; exists {
-		return fmt.Sprintf("%s:%s", abbrev, fragment), nil
-	}
-	return "", fmt.Errorf("declaration of URI(%s) not found in the schemaDefinition", baseURI)
-}
-
-// from a given adjacency list, return a list of root-nodes which will be used
-// to generate string forms of the nodes to be written.
-func getRootNodes(triples []*parser.Triple) (rootNodes []*parser.Node) {
-
-	// In a disjoint set, indices with root nodes will point to nil
-	// that means, if disjointSet[1] is nil, subjects[1] has no parent.
-	// that is, subject[1] is not the object of any of the triples.
-	var parent map[*parser.Node]*parser.Node
-	parent = DisjointSet(triples)
-
-	for node := range parent {
-		if parent[node] == nil {
-			rootNodes = append(rootNodes, node)
-		}
-	}
-	return rootNodes
-}
-
-func filterTriples(triples []*parser.Triple, subject, predicate, object *string) (result []*parser.Triple) {
+//  returns the triples that matches the input subject, object and the predicate.
+// reason behind using string pointers is that it allows the user to pass a nil
+// if the user is unsure about the other types.
+// For example, if the user wants all the triples with subject rdf:about, the
+// user can call FilterTriples(triples, &rdfAboutString, nil, nil)
+// where, rdfAboutString := "rdf:about"
+func FilterTriples(triples []*parser.Triple, subject, predicate, object *string) (result []*parser.Triple) {
 	for _, triple := range triples {
 		if (subject == nil || *subject == triple.Subject.ID) && (predicate == nil || *predicate == triple.Predicate.ID) && (object == nil || *object == triple.Object.ID) {
 			result = append(result, triple)
@@ -52,6 +23,7 @@ func filterTriples(triples []*parser.Triple, subject, predicate, object *string)
 	return
 }
 
+// returns the string form of the root tag with all the uri definitions
 func getRootTagFromSchemaDefinition(schemaDefinition map[string]uri.URIRef, tab string) string {
 	rootTag := "<rdf:RDF\n"
 	for tag := range schemaDefinition {
@@ -63,25 +35,10 @@ func getRootTagFromSchemaDefinition(schemaDefinition map[string]uri.URIRef, tab 
 	return rootTag
 }
 
-func getRestTriples(triples []*parser.Triple) (restTriples []*parser.Triple) {
+// returns the string form of the opening and closing tag from the given triples.
+func getOpeningAndClosingTags(triples []*parser.Triple, rdfNSAbbrev string, invSchemaDefinition map[string]string, tabs string, node *parser.Node) (openingTag string, closingTag string, err error) {
 	rdfTypeURI := parser.RDFNS + "type"
 	rdfNodeIDURI := parser.RDFNS + "nodeID"
-	rdfResourceURI := parser.RDFNS + "resource"
-	for _, triple := range triples {
-		if !any(triple.Predicate.ID, []string{rdfNodeIDURI, rdfResourceURI, rdfTypeURI}) {
-			restTriples = append(restTriples, triple)
-		}
-	}
-	return restTriples
-}
-
-func stringify(node *parser.Node, nodeToTriples map[*parser.Node][]*parser.Triple, invSchemaDefinition map[string]string, depth int, tab string) (output string, err error) {
-	rdfTypeURI := parser.RDFNS + "type"
-	rdfNodeIDURI := parser.RDFNS + "nodeID"
-	rdfNSAbbrev := "rdf"
-	if abbrev, exists := invSchemaDefinition[parser.RDFNS]; exists {
-		rdfNSAbbrev = abbrev
-	}
 
 	openingTagFormat := "<%s%s%s>"
 	closingTagFormat := "</%s>"
@@ -94,24 +51,19 @@ func stringify(node *parser.Node, nodeToTriples map[*parser.Node][]*parser.Tripl
 	//         rdf:nodeID="ID" for the given example
 	// 3rd %s: rdf:about property
 	//         rdf:about="https://sample.com#name" for the given example
-	// NOTE: 2nd, 3rd and 4th %s can be given in any order. won't affect the semantics of the output.
-	// Description of %s in closingTagFormat
-	// 6th %%s: Same as 1st %s of openingTagFormat
+	// NOTE: 2nd and 3rd %s can be given in any order. won't affect the semantics of the output.
+	// Description of the %s used in the closingTagFormat:
+	// 1st %s: same as first %s of openingTagFormat
 
-	var openingTag, closingTag, childrenString string
-	rdfTypeTriples := filterTriples(nodeToTriples[node], nil, &rdfTypeURI, nil)
+	rdfTypeTriples := FilterTriples(triples, nil, &rdfTypeURI, nil)
 	if n := len(rdfTypeTriples); n != 1 {
-		return "", fmt.Errorf("every subject node must be associated with exactly 1 triple of type rdf:type predicate. Found %v triples", n)
+		return openingTag, closingTag, fmt.Errorf("every subject node must be associated with exactly 1 triple of type rdf:type predicate. Found %v triples", n)
 	}
-	rdfnodeIDTriples := filterTriples(nodeToTriples[node], nil, &rdfNodeIDURI, nil)
+	rdfnodeIDTriples := FilterTriples(triples, nil, &rdfNodeIDURI, nil)
 	if n := len(rdfnodeIDTriples); n > 1 {
-		return "", fmt.Errorf("there must be atmost nodeID attribute. found %v nodeID attributes", n)
+		return openingTag, closingTag, fmt.Errorf("there must be atmost nodeID attribute. found %v nodeID attributes", n)
 	}
 
-	tagName, err := shortenURI(rdfTypeTriples[0].Object.ID, invSchemaDefinition)
-	if err != nil {
-		return "", err
-	}
 	rdfNodeID := ""
 	if len(rdfnodeIDTriples) == 1 {
 		rdfNodeID = fmt.Sprintf(` %s:nodeID="%s"`, rdfNSAbbrev, rdfnodeIDTriples[0].Object.ID)
@@ -121,13 +73,36 @@ func stringify(node *parser.Node, nodeToTriples map[*parser.Node][]*parser.Tripl
 		rdfAbout = fmt.Sprintf(` %s:about="%s"`, rdfNSAbbrev, node.ID)
 	}
 
-	openingTag = strings.Repeat(tab, depth) + fmt.Sprintf(openingTagFormat, tagName, rdfNodeID, rdfAbout)
-	closingTag = strings.Repeat(tab, depth) + fmt.Sprintf(closingTagFormat, tagName)
+	tagName, err := shortenURI(rdfTypeTriples[0].Object.ID, invSchemaDefinition)
+	if err != nil {
+		return openingTag, closingTag, err
+	}
 
-	// getting rest of the triples after rdf triples are parsed
+	openingTag = tabs + fmt.Sprintf(openingTagFormat, tagName, rdfNodeID, rdfAbout)
+	closingTag = tabs + fmt.Sprintf(closingTagFormat, tagName)
+	return openingTag, closingTag, nil
+}
+
+// returns the string equivalent of the triples associated with the given node in rdf/xml format.
+func stringify(node *parser.Node, nodeToTriples map[*parser.Node][]*parser.Triple, invSchemaDefinition map[string]string, depth int, tab string) (output string, err error) {
+	// Any rdf/xml tag is formed of OpeningTag, childrenString, ClosingTag
+	var openingTag, childrenString, closingTag string
+
+	tabs := strings.Repeat(tab, depth)
+
+	// getting the abbreviation used for rdf namespace.
+	rdfNSAbbrev := getRDFNSAbbreviation(invSchemaDefinition)
+
+	openingTag, closingTag, err = getOpeningAndClosingTags(nodeToTriples[node], rdfNSAbbrev, invSchemaDefinition, tabs, node)
+	if err != nil {
+		return
+	}
+
+	// getting rest of the triples after rdf attributes are parsed
 	restTriples := getRestTriples(nodeToTriples[node])
 
-	depth++ // we'll be parsing one level deep now.
+	depth++     // we'll be parsing one level deep now.
+	tabs += tab // or strings.Repeat(tab, depth)
 	for _, triple := range restTriples {
 		predicateURI, err := shortenURI(triple.Predicate.ID, invSchemaDefinition)
 		if err != nil {
@@ -135,13 +110,13 @@ func stringify(node *parser.Node, nodeToTriples map[*parser.Node][]*parser.Tripl
 		}
 
 		if triple.Object.NodeType == parser.RESOURCELITERAL {
-			childrenString += strings.Repeat(tab, depth) + fmt.Sprintf(`<%s %s:resource="%s"/>`, predicateURI, rdfNSAbbrev, triple.Object.ID) + "\n"
+			childrenString += tabs + fmt.Sprintf(`<%s %s:resource="%s"/>`, predicateURI, rdfNSAbbrev, triple.Object.ID) + "\n"
 			continue
 		}
 
 		var childString string
 		// adding opening tag to the child tag:
-		childString += strings.Repeat(tab, depth) + fmt.Sprintf("<%s>", predicateURI) + "\n"
+		childString += tabs + fmt.Sprintf("<%s>", predicateURI) + "\n"
 		if len(nodeToTriples[triple.Object]) == 0 {
 			// the tag ends here and doesn't have any further childs.
 			// object is even one level deep
@@ -156,13 +131,20 @@ func stringify(node *parser.Node, nodeToTriples map[*parser.Node][]*parser.Tripl
 			childString += temp
 		}
 		// adding the closing tag
-		childString += "\n" + strings.Repeat(tab, depth) + fmt.Sprintf(closingTagFormat, predicateURI)
+		childString += "\n" + tabs + fmt.Sprintf("</%s>", predicateURI)
 		childrenString += childString + "\n"
 	}
 	childrenString = strings.TrimSuffix(childrenString, "\n")
 	return fmt.Sprintf("%s\n%v\n%s", openingTag, childrenString, closingTag), nil
 }
 
+// function provided to the user for converting triples to string.
+// Arg Description:
+//   triples: list of triples of a rdf graph
+//   schemaDefinition: maps the prefix given by xmlns to the URI
+//   tab: tab character to be used in the output. It can be four-spaces,
+//        two-spaces, single tab character, double tab character, etc
+//        depending upon the choice of the user.
 func TriplesToString(triples []*parser.Triple, schemaDefinition map[string]uri.URIRef, tab string) (outputString string, err error) {
 	// linearly ordering the triples in a non-increasing order of depth.
 	sortedTriples, err := TopologicalSortTriples(triples)
@@ -176,9 +158,9 @@ func TriplesToString(triples []*parser.Triple, schemaDefinition map[string]uri.U
 
 	// now, we can iterate over all the root-nodes and generate the string representation of the nodes.
 	for _, tag := range rootTags {
-		currString, err := stringify(tag, nodeToTriples, invSchemaDefinition, 1, "  ")
+		currString, err := stringify(tag, nodeToTriples, invSchemaDefinition, 1, tab)
 		if err != nil {
-			return outputString, nil
+			return outputString, err
 		}
 		outputString += currString + "\n"
 	}
@@ -188,12 +170,14 @@ func TriplesToString(triples []*parser.Triple, schemaDefinition map[string]uri.U
 }
 
 // converts the input triples to string and writes it to the file.
-func WriteToFile(triples []*parser.Triple, schemaDefinition map[string]uri.URIRef, tab, filePath string) error {
+// Args Description:
+//   w: writer in which the output data will be written.
+//   rest all params are same as that of the TriplesToString function.
+func WriteToFile(w io.Writer, triples []*parser.Triple, schemaDefinition map[string]uri.URIRef, tab string) error {
 	opString, err := TriplesToString(triples, schemaDefinition, tab)
 	if err != nil {
 		return err
 	}
-
-	// Default file permission is hardcoded. Maybe leave it to the user.
-	return ioutil.WriteFile(filePath, []byte(opString), 655)
+	_, err = fmt.Fprint(w, opString)
+	return err
 }
